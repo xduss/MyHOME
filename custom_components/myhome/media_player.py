@@ -149,8 +149,8 @@ async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entitie
         zone = str(message.zone)
 
         # Intercept stereo module pseudo-zones used for source selection
-        # (e.g. 11x, 12x, 13x, 14x representing source 1-4 for amplifier output x)
-        if len(zone) == 3 and zone[:2] in ("11", "12", "13", "14"):
+        # (e.g. 10x, 11x, 12x, 13x, 14x representing source 0-4 for amplifier output x)
+        if len(zone) == 3 and zone[:2] in ("10", "11", "12", "13", "14"):
             point = zone[-1]
             for player_id in known_media_players:
                 if player_id.split("#")[0].endswith(point):
@@ -527,6 +527,11 @@ class MyHOMEMediaPlayer(MyHOMEEntity, MediaPlayerEntity):
         Stops playback on the decoder before releasing it so that it returns
         to the idle pool in a clean state.
         """
+        # Optimistically set state to OFF so the UI updates immediately.
+        # The gateway may not echo the OFF event back via the event session,
+        # leaving the dashboard card stuck on "On" indefinitely.
+        self._attr_state = MediaPlayerState.OFF
+
         await self._gateway_handler.send(OWNSoundCommand.turn_off(self._where))
 
         if self._active_decoder:
@@ -767,7 +772,7 @@ class MyHOMEMediaPlayer(MyHOMEEntity, MediaPlayerEntity):
         """Handle incoming state updates directly from the bus."""
         zone_str = str(message.zone)
         # Parse matrix routing events (e.g. 121 -> Route Source 2 to Zone x1)
-        if len(zone_str) == 3 and zone_str[:2] in ("11", "12", "13", "14"):
+        if len(zone_str) == 3 and zone_str[:2] in ("10", "11", "12", "13", "14"):
             if self._where.endswith(zone_str[-1]):
                 source_num = int(zone_str[1])
                 self._attr_source = f"Source {source_num}"

@@ -161,8 +161,11 @@ class TestMediaPlayerEntity:
 
     @pytest.mark.asyncio
     async def test_turn_off(self, player):
+        from homeassistant.components.media_player import MediaPlayerState
         await player.async_turn_off()
         player._gateway_handler.send.assert_called_once()
+        # Turn-off must optimistically set state to OFF immediately
+        assert player._attr_state == MediaPlayerState.OFF
 
     @pytest.mark.asyncio
     async def test_volume_up(self, player):
