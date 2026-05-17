@@ -2075,15 +2075,7 @@ class OWNSoundCommand(OWNCommand):
             Source 3 → base 13x
             Source 4 → base 14x
         where 'x' is the last digit of the zone address.
-        """
-        # Hardware wiring map: Map logical zones (A/PL) to physical F441M output ports (1-4)
-        # By default, falls back to the last digit of the logical zone address
-        wiring_map = {
-            "21": "2",  # Bureau is wired to Output 2
-            "22": "3",  # Assuming sequence, update if wrong
-            "23": "4",
-        }
-        zone_digit = wiring_map.get(str(where), str(where)[-1])
+        zone_digit = str(where)[-1]
         source_base = 10 + int(source_id)  # source 0->10, 1->11, 2->12, 3->13, 4->14
         source_addr = f"{source_base}{zone_digit}"
         message = cls(f"*16*3*{source_addr}##")
