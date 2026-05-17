@@ -2075,6 +2075,7 @@ class OWNSoundCommand(OWNCommand):
             Source 3 → base 13x
             Source 4 → base 14x
         where 'x' is the last digit of the zone address.
+        """
         zone_digit = str(where)[-1]
         source_base = 10 + int(source_id)  # source 0->10, 1->11, 2->12, 3->13, 4->14
         source_addr = f"{source_base}{zone_digit}"
