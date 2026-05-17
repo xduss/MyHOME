@@ -152,7 +152,21 @@ class TestMediaPlayerEntity:
         player.handle_event(msg)
         assert player._attr_state == MediaPlayerState.OFF
 
+    def test_handle_event_source_0_routing(self, player):
+        from homeassistant.components.media_player import MediaPlayerState
+        msg = OWNEvent.parse("*16*3*101##")
+        player.handle_event(msg)
+        assert player._attr_state == MediaPlayerState.ON
+        assert player._attr_source == "Source 0"
+        player.async_schedule_update_ha_state.assert_called()
 
+    def test_handle_event_source_1_routing(self, player):
+        from homeassistant.components.media_player import MediaPlayerState
+        msg = OWNEvent.parse("*16*3*111##")
+        player.handle_event(msg)
+        assert player._attr_state == MediaPlayerState.ON
+        assert player._attr_source == "Source 1"
+        player.async_schedule_update_ha_state.assert_called()
 
     @pytest.mark.asyncio
     async def test_turn_on(self, player):
