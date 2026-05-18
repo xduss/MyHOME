@@ -2104,6 +2104,22 @@ class OWNSoundCommand(OWNCommand):
         return [activate, route]
 
     @classmethod
+    def source_cycle(cls):
+        """Cycle to the next source on the F441M matrix.
+
+        Sends the official SOURCES CYCLE command (WHAT=23, WHERE=100).
+        This is the only safe way to change the active source via the
+        gateway.  Direct source-activation or compound-routing commands
+        corrupt the F441M audio path and produce hiss.
+
+        The matrix will report the new active source on the bus
+        (e.g. ``*16*3*101##`` for Source 1, ``*16*3*102##`` for Source 2).
+        """
+        message = cls("*16*23*100##")
+        message._human_readable_log = "Cycling to next audio source."
+        return message
+
+    @classmethod
     def volume_up(cls, where):
         message = cls(f"*16*1001*{where}##")
         message._human_readable_log = f"Turning UP volume for audio zone {where}."

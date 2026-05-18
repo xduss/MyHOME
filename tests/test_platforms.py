@@ -196,7 +196,7 @@ class TestMediaPlayerEntity:
     @pytest.mark.asyncio
     async def test_turn_on(self, player):
         await player.async_turn_on()
-        assert player._gateway_handler.send.call_count == 6
+        assert player._gateway_handler.send.call_count == 2
 
     @pytest.mark.asyncio
     async def test_turn_off(self, player):
@@ -219,7 +219,11 @@ class TestMediaPlayerEntity:
     @pytest.mark.asyncio
     async def test_select_source(self, player):
         await player.async_select_source("Source 3")
-        assert player._gateway_handler.send.call_count == 6
+        assert player._gateway_handler.send.call_count == 1
+        args, _ = player._gateway_handler.send.call_args
+        command = args[0]
+        # Should send the Standard CEN trigger for Button 3 on the amplifier's address (1)
+        assert str(command) == "*15*3#00*1##"
 
     @pytest.mark.asyncio
     async def test_select_source_invalid(self, player):

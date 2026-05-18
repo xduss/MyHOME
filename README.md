@@ -91,8 +91,21 @@ Audio zones are automatically discovered as `media_player` entities when any sou
 | Turn On/Off | Standard HA media player controls |
 | Volume Up/Down | Step-based volume adjustment |
 | Volume Slider | Absolute volume set (0–31 → normalized 0.0–1.0) |
-| Source Selection | Selects stereo source (1–4) for the specific zone |
+| Source Selection | **Native CEN Macro Architecture** (See Note Below) |
 | Mute | Software-emulated (caches volume, sets to 0, restores on unmute) |
+
+#### F441M Native CEN Macro Architecture
+Due to aggressive TCP buffer queueing in modern IP Gateways (F454) and strict hardware preambles required by the F441M audio matrix, **source selection is NOT performed via raw OpenWebNet asynchronous injection**. Doing so causes bus collisions and permanent "floating ground" audio hiss.
+
+Instead, this integration implements a highly stable **Native CEN Orchestration**:
+1. You use the official BTicino software to program native Sound System routing macros directly onto your scenario gateway.
+2. Home Assistant maps `select_source` to trigger these macros via virtual button presses:
+   - For **MH200 (Legacy)**: Uses Standard CEN (`WHO=15`) syntax: `*15*<Button>#00*<Commando>##`
+   - For **MH200N (Modern)**: Uses CEN+ (`WHO=25`) syntax: `*25*<Commando>#<Button>*01##`
+3. The gateway locally executes the hardware-perfect CSMA/CA timing and analog isolation preambles to switch the matrix flawlessly and silently.
+
+> **Hardware Note (TiMH200 Upload Bug):** 
+> If you are programming a legacy **MH200** using the older `Configurator TiMH200` software on Windows 10/11, clicking "Upload" over Serial may result in an `invalid project file format` compiler error. To fix this, you must right-click `TiMH200.exe`, go to Properties -> Compatibility, and set it to **Windows XP (Service Pack 3)** and **Run as Administrator**.
 
 For **manual OWN commands** (e.g., via the `myhome.send_message` service), refer to the OpenWebNet specification for WHO=16.
 

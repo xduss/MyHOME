@@ -403,43 +403,22 @@ class MyHOMEMediaPlayer(MyHOMEEntity, MediaPlayerEntity):
                     decoder_id,
                 )
 
-        # 3. Turn on the BTicino zone amplifier and route the matrix.
+        # 3. Turn on the BTicino zone amplifier.
         #
-        # The BTicino F441M stereo module requires a specific cold-boot
-        # initialisation sequence (captured from the physical wall panel):
-        #   a) OFF-reset the zone  — clears stale relay state
-        #   b) Volume init dance   — max then zero (hardware handshake)
-        #   c) Turn ON the zone    — wakes the amplifier relays
-        #   d) Select source       — routes the matrix input
+        # The F441M matrix remembers its source routing from the physical
+        # wall-panel configuration.  Sending source-selection commands
+        # (*16*3*10X## or *16*3*1XY##) via the gateway CORRUPTS the matrix
+        # routing and produces hiss instead of audio.  The volume-init
+        # dance (max → zero) also disrupts the audio path.
         #
-        # Sending just select_source alone leaves a sleeping amplifier dead.
-        # Sending just turn_on + select_source (without the reset) causes
-        # a loud hardware hiss because the relays latch in a corrupt state.
-        #
-        # When the zone is already ON, we skip the init and just re-route.
+        # Confirmed via MCP bus testing: a simple OFF → ON is sufficient
+        # and reliably produces clean audio.  The matrix automatically
+        # restores the previous source assignment and volume level.
         if self._attr_state != MediaPlayerState.ON:
-            # a) OFF-reset
             await self._gateway_handler.send(OWNSoundCommand.turn_off(self._where))
-            await asyncio.sleep(0.2)
-            # b) Volume init dance (max → zero) — the hardware handshake
-            await self._gateway_handler.send(OWNSoundCommand.set_volume(self._where, 31))
-            await asyncio.sleep(0.2)
-            await self._gateway_handler.send(OWNSoundCommand.set_volume(self._where, 0))
-            await asyncio.sleep(0.2)
-            # c) Turn ON the zone
+            await asyncio.sleep(0.5)
             await self._gateway_handler.send(OWNSoundCommand.turn_on(self._where))
-            await asyncio.sleep(0.2)
-
-        # d) Activate source device + route the matrix to the decoder's input
-        for cmd in OWNSoundCommand.select_source(self._where, str(source_num)):
-            await self._gateway_handler.send(cmd)
-            await asyncio.sleep(0.2)
-
-        # The stereo select_source command uses a compound address (e.g., 121)
-        # so the HA dispatcher for zone 21 misses the ON event.  We must
-        # manually assert the ON state to prevent Music Assistant from
-        # thinking the zone is OFF and forcefully muting the stream volume.
-        if self._attr_state != MediaPlayerState.ON:
+            await asyncio.sleep(0.5)
             self._attr_state = MediaPlayerState.ON
             self.async_write_ha_state()
 
@@ -508,20 +487,17 @@ class MyHOMEMediaPlayer(MyHOMEEntity, MediaPlayerEntity):
     # ── Zone on / off ─────────────────────────────────────────────────────────
 
     async def async_turn_on(self, **kwargs) -> None:
-        """Turn the zone amplifier on."""
-        source_id = self._attr_source.split(" ")[-1] if self._attr_source else "1"
+        """Turn the zone amplifier on.
+
+        Uses a simple OFF → ON sequence.  The F441M matrix remembers
+        its source routing from the wall-panel configuration; sending
+        explicit source-selection commands corrupts the audio path.
+        """
         if self._attr_state != MediaPlayerState.ON:
             await self._gateway_handler.send(OWNSoundCommand.turn_off(self._where))
-            await asyncio.sleep(0.2)
-            await self._gateway_handler.send(OWNSoundCommand.set_volume(self._where, 31))
-            await asyncio.sleep(0.2)
-            await self._gateway_handler.send(OWNSoundCommand.set_volume(self._where, 0))
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.5)
             await self._gateway_handler.send(OWNSoundCommand.turn_on(self._where))
-            await asyncio.sleep(0.2)
-        for cmd in OWNSoundCommand.select_source(self._where, source_id):
-            await self._gateway_handler.send(cmd)
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.5)
 
     async def async_turn_off(self, **kwargs) -> None:
         """Turn the zone amplifier off and release any claimed decoder.
@@ -644,25 +620,35 @@ class MyHOMEMediaPlayer(MyHOMEEntity, MediaPlayerEntity):
     # ── Source selection ──────────────────────────────────────────────────────
 
     async def async_select_source(self, source: str) -> None:
-        """Select a BTicino source input manually.
+        """Trigger the MH200N CEN+ macro for source routing.
+
+        The F441M matrix does not support direct per-amplifier source
+        routing via the gateway without causing analog relay hiss.
+        Instead, we trigger native scenarios on the MH200N via CEN+ (WHO=25).
 
         Args:
-            source: Source label, e.g. ``"Source 1"``.
+            source: Source label, e.g. ``"Source 1"`` (used to trigger
+                the corresponding button on the virtual CEN+ commando).
         """
         if source in self._attr_source_list:
-            source_id = source.split(" ")[1]
-            if self._attr_state != MediaPlayerState.ON:
-                await self._gateway_handler.send(OWNSoundCommand.turn_off(self._where))
-                await asyncio.sleep(0.2)
-                await self._gateway_handler.send(OWNSoundCommand.set_volume(self._where, 31))
-                await asyncio.sleep(0.2)
-                await self._gateway_handler.send(OWNSoundCommand.set_volume(self._where, 0))
-                await asyncio.sleep(0.2)
-                await self._gateway_handler.send(OWNSoundCommand.turn_on(self._where))
-                await asyncio.sleep(0.2)
-            for cmd in OWNSoundCommand.select_source(self._where, source_id):
-                await self._gateway_handler.send(cmd)
-                await asyncio.sleep(0.2)
+            # Extract the source number from the string (e.g. "Source 1" -> 1)
+            try:
+                source_num = int(source.split()[1])
+            except (IndexError, ValueError):
+                return
+
+            # Construct the Standard CEN (WHO=15) trigger command
+            # Syntax: *15*<ButtonNumber>#<Action>*<CommandoAddress>##
+            # Action 00 = Short Press
+            # The Virtual Commando address matches the Amplifier address
+            command_str = f"*15*{source_num}#00*{self._where}##"
+            
+            from .ownd.message import OWNCommand
+            command = OWNCommand(command_str)
+            command._human_readable_log = f"Triggering Standard CEN Macro for Source {source_num} on Amp {self._where}"
+            
+            # Fire the trigger - the MH200N handles all the hardware delays and state natively!
+            await self._gateway_handler.send(command)
 
     # ── State and metadata mirroring ──────────────────────────────────────────
 
