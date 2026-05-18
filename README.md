@@ -109,14 +109,18 @@ The `async_select_source` method in `media_player.py` is intentionally a **no-op
 3. For **each amplifier zone**, add a sound system action:
    - **Action:** Stereo ON (`WHAT=3`)
    - **Address:** Compound `1<source><zone_digit>` (e.g. `121` = Source 2, Zone 1)
-4. The compound address table for Source 2 (Aux):
+4. The compound address table for Source 2 (Aux) — all 8 F441M outputs:
 
    | Amplifier Zone | Zone Digit | Compound Address | Command |
    |---|---|---|---|
+   | 14 | 4 | 124 | `*16*3*124##` |
+   | 17 | 7 | 127 | `*16*3*127##` |
+   | 18 | 8 | 128 | `*16*3*128##` |
    | 21 (Bureau) | 1 | 121 | `*16*3*121##` |
-   | 22 (Kitchen) | 2 | 122 | `*16*3*122##` |
-   | 23 (Living) | 3 | 123 | `*16*3*123##` |
-   | 24 (Bedroom) | 4 | 124 | `*16*3*124##` |
+   | 22 | 2 | 122 | `*16*3*122##` |
+   | 23 | 3 | 123 | `*16*3*123##` |
+   | 35 | 5 | 125 | `*16*3*125##` |
+   | 36 | 6 | 126 | `*16*3*126##` |
 
 5. Upload via Serial (COM1) to the MH200.
 
