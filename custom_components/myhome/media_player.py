@@ -620,35 +620,49 @@ class MyHOMEMediaPlayer(MyHOMEEntity, MediaPlayerEntity):
     # ── Source selection ──────────────────────────────────────────────────────
 
     async def async_select_source(self, source: str) -> None:
-        """Trigger the MH200N CEN+ macro for source routing.
+        """Route the amplifier to a different source via WHO=16.
 
-        The F441M matrix does not support direct per-amplifier source
-        routing via the gateway without causing analog relay hiss.
-        Instead, we trigger native scenarios on the MH200N via CEN+ (WHO=25).
+        The F441M matrix uses compound stereo addresses for routing:
+        ``*16*3*1{source}{zone_digit}##``
+
+        For example, to route amplifier zone 21 to source 3:
+        ``*16*3*131##``  (source_base=13, zone_digit=1)
+
+        The matrix automatically activates the target source and
+        deactivates any previously active source on the bus.
+
+        A soft mute (OFF → delay → route → ON) is applied to prevent
+        audible relay transients during the cross-point switch.
 
         Args:
-            source: Source label, e.g. ``"Source 1"`` (used to trigger
-                the corresponding button on the virtual CEN+ commando).
+            source: Source label, e.g. ``"Source 1"``.
         """
         if source in self._attr_source_list:
-            # Extract the source number from the string (e.g. "Source 1" -> 1)
             try:
                 source_num = int(source.split()[1])
             except (IndexError, ValueError):
                 return
 
-            # Construct the Standard CEN (WHO=15) trigger command
-            # Syntax: *15*<ButtonNumber>#<Action>*<CommandoAddress>##
-            # Action 00 = Short Press
-            # The Virtual Commando address matches the Amplifier address
-            command_str = f"*15*{source_num}#00*{self._where}##"
-            
+            zone_digit = str(self._where)[-1]
+            source_base = 10 + source_num
+            compound_addr = f"{source_base}{zone_digit}"
+
+            # Soft-mute before switching to avoid relay pop
+            await self._gateway_handler.send(OWNSoundCommand.turn_off(self._where))
+            await asyncio.sleep(0.3)
+
+            # Send the compound routing command
             from .ownd.message import OWNCommand
-            command = OWNCommand(command_str)
-            command._human_readable_log = f"Triggering Standard CEN Macro for Source {source_num} on Amp {self._where}"
-            
-            # Fire the trigger - the MH200N handles all the hardware delays and state natively!
-            await self._gateway_handler.send(command)
+            route_cmd = OWNCommand(f"*16*3*{compound_addr}##")
+            route_cmd._human_readable_log = (
+                f"Routing zone {self._where} to source {source_num} "
+                f"(compound address {compound_addr})"
+            )
+            await self._gateway_handler.send(route_cmd)
+            await asyncio.sleep(0.5)
+
+            # Re-enable audio
+            await self._gateway_handler.send(OWNSoundCommand.turn_on(self._where))
 
     # ── State and metadata mirroring ──────────────────────────────────────────
 
