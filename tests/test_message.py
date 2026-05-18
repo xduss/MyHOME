@@ -149,9 +149,14 @@ def test_own_sound_command_generation():
     off_msg = OWNSoundCommand.turn_off("11")
     assert str(off_msg) == "*16*13*11##"
 
-    # Select Source — must send WHAT=3 (stereo) to zone-specific source address
-    source_msg = OWNSoundCommand.select_source("22", "3")
-    assert str(source_msg) == "*16*3*132##"  # source 3 base=13, zone digit=2
+    # Select Source — returns TWO commands:
+    #   1. Activate the source device on the bus (WHERE = 100 + source)
+    #   2. Route the amplifier output to that source (compound 1XY address)
+    source_cmds = OWNSoundCommand.select_source("22", "3")
+    assert isinstance(source_cmds, list)
+    assert len(source_cmds) == 2
+    assert str(source_cmds[0]) == "*16*3*103##"  # activate source 3 device
+    assert str(source_cmds[1]) == "*16*3*132##"  # route zone 2 to source 3
 
     # Volume Up
     vol_up_msg = OWNSoundCommand.volume_up("0") # All zones
