@@ -91,21 +91,39 @@ Audio zones are automatically discovered as `media_player` entities when any sou
 | Turn On/Off | Standard HA media player controls |
 | Volume Up/Down | Step-based volume adjustment |
 | Volume Slider | Absolute volume set (0–31 → normalized 0.0–1.0) |
-| Source Selection | **Soft-Muted Compound Routing** (See Note Below) |
+| Source Selection | **MH200 Startup Scenario** (fixed routing — see below) |
 | Mute | Software-emulated (caches volume, sets to 0, restores on unmute) |
 
 #### F441M Source Routing Architecture
-The F441M audio matrix uses **compound stereo addresses** for source routing. When Home Assistant selects a source, the integration sends a 3-step sequence:
 
-1. **Soft Mute** — `*16*13*<zone>##` (stereo OFF) to silence the amplifier before switching.
-2. **Compound Route** — `*16*3*1<source><zone_digit>##` to cross-connect the matrix relay.
-   - Example: Route zone `21` to source `3` → `*16*3*131##` (source_base=13, zone_digit=1).
-3. **Unmute** — `*16*3*<zone>##` (stereo ON) to restore audio after the relay settles.
+> **Important:** The original MH200 gateway (firmware ≤ 2.1.0) **cannot** switch F441M matrix sources hiss-free via IP. All WHO=16 compound routing commands (`*16*3*1XY##`) sent through the IP gateway produce audible analog relay transients because the gateway's SCS frame translation lacks the A5 analog isolation preamble that native bus devices (wall panels) include. Additionally, the MH200 does **not** support CEN/CEN+ virtual triggering over IP (WHO=15 and WHO=25 are NACK'd).
 
-The F441M matrix automatically activates the target source device and deactivates the previous one on the bus. This is the same command sequence used by the physical wall panels.
+**Solution:** All zones are permanently routed to the **Aux** input (Source 2 — e.g. Cambridge CXN) via a **power-on startup scenario** programmed into the MH200 using the TiMH200 software. Streaming is handled entirely by the network decoder (Spotify Connect / Music Assistant), so no matrix routing change is ever needed at runtime.
 
-> **Legacy Note (TiMH200 Upload Bug):**
-> If you need to program scenarios on a legacy **MH200** using the `Configurator TiMH200` software on Windows 10/11, the "Upload" button may fail with an `invalid project file format` error. Fix: right-click `TiMH200.exe` → Properties → Compatibility → set to **Windows XP (Service Pack 3)** and **Run as Administrator**. Note that the MH200 does not support CEN/CEN+ triggering over IP.
+The `async_select_source` method in `media_player.py` is intentionally a **no-op** that logs an informational message.
+
+##### Setting Up the MH200 Startup Scenario
+
+1. Open **Configurator TiMH200** (Windows XP SP3 compatibility mode, Run as Administrator).
+2. Create a new **Scenario** of type **"All'accensione"** (Power-On / Startup).
+3. For **each amplifier zone**, add a sound system action:
+   - **Action:** Stereo ON (`WHAT=3`)
+   - **Address:** Compound `1<source><zone_digit>` (e.g. `121` = Source 2, Zone 1)
+4. The compound address table for Source 2 (Aux):
+
+   | Amplifier Zone | Zone Digit | Compound Address | Command |
+   |---|---|---|---|
+   | 21 (Bureau) | 1 | 121 | `*16*3*121##` |
+   | 22 (Kitchen) | 2 | 122 | `*16*3*122##` |
+   | 23 (Living) | 3 | 123 | `*16*3*123##` |
+   | 24 (Bedroom) | 4 | 124 | `*16*3*124##` |
+
+5. Upload via Serial (COM1) to the MH200.
+
+> **TiMH200 Upload Bug:** On Windows 10/11, right-click `TiMH200.exe` → Properties → Compatibility → **Windows XP (Service Pack 3)** + **Run as Administrator**.
+
+##### Upgrading the Gateway
+To restore full IP-based source switching (hiss-free CEN+ triggering), upgrade to an **MH200N**, **F454**, or **F459** gateway. These support `WHO=25` CEN+ virtual triggering over IP with proper SCS frame generation.
 
 For **manual OWN commands** (e.g., via the `myhome.send_message` service), refer to the OpenWebNet specification for WHO=16.
 

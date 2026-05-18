@@ -620,49 +620,25 @@ class MyHOMEMediaPlayer(MyHOMEEntity, MediaPlayerEntity):
     # ── Source selection ──────────────────────────────────────────────────────
 
     async def async_select_source(self, source: str) -> None:
-        """Route the amplifier to a different source via WHO=16.
+        """Source selection is managed by the MH200 startup scenario.
 
-        The F441M matrix uses compound stereo addresses for routing:
-        ``*16*3*1{source}{zone_digit}##``
+        The F441M audio matrix cannot be source-switched hiss-free via
+        the IP gateway.  All zones are permanently routed to the Aux
+        input (Source 2 / Cambridge CXN) by a power-on scenario
+        programmed into the MH200 scenario module.
 
-        For example, to route amplifier zone 21 to source 3:
-        ``*16*3*131##``  (source_base=13, zone_digit=1)
+        Streaming is handled entirely by the Cambridge CXN decoder
+        via Spotify Connect or Music Assistant — no matrix routing
+        change is needed.
 
-        The matrix automatically activates the target source and
-        deactivates any previously active source on the bus.
-
-        A soft mute (OFF → delay → route → ON) is applied to prevent
-        audible relay transients during the cross-point switch.
-
-        Args:
-            source: Source label, e.g. ``"Source 1"``.
+        See ``README.md`` §F441M Source Routing Architecture for details.
         """
-        if source in self._attr_source_list:
-            try:
-                source_num = int(source.split()[1])
-            except (IndexError, ValueError):
-                return
-
-            zone_digit = str(self._where)[-1]
-            source_base = 10 + source_num
-            compound_addr = f"{source_base}{zone_digit}"
-
-            # Soft-mute before switching to avoid relay pop
-            await self._gateway_handler.send(OWNSoundCommand.turn_off(self._where))
-            await asyncio.sleep(0.3)
-
-            # Send the compound routing command
-            from .ownd.message import OWNCommand
-            route_cmd = OWNCommand(f"*16*3*{compound_addr}##")
-            route_cmd._human_readable_log = (
-                f"Routing zone {self._where} to source {source_num} "
-                f"(compound address {compound_addr})"
-            )
-            await self._gateway_handler.send(route_cmd)
-            await asyncio.sleep(0.5)
-
-            # Re-enable audio
-            await self._gateway_handler.send(OWNSoundCommand.turn_on(self._where))
+        LOGGER.info(
+            "%s: Source selection is handled by the MH200 startup scenario. "
+            "Ignoring select_source('%s').",
+            self.entity_id,
+            source,
+        )
 
     # ── State and metadata mirroring ──────────────────────────────────────────
 

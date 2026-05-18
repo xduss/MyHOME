@@ -218,17 +218,13 @@ class TestMediaPlayerEntity:
 
     @pytest.mark.asyncio
     async def test_select_source(self, player):
+        """Source selection is a no-op (MH200 startup scenario handles routing)."""
         await player.async_select_source("Source 3")
-        # Should send 3 commands: OFF (soft mute), compound route, ON (unmute)
-        assert player._gateway_handler.send.call_count == 3
-        calls = [str(c.args[0]) for c in player._gateway_handler.send.call_args_list]
-        assert calls[0] == "*16*13*1##"     # turn off (soft mute)
-        assert calls[1] == "*16*3*131##"    # route zone 1 to source 3 (compound 1XY)
-        assert calls[2] == "*16*3*1##"      # turn on (unmute)
+        player._gateway_handler.send.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_select_source_invalid(self, player):
-        """Invalid source should not send any command."""
+        """Invalid source should also be a no-op."""
         await player.async_select_source("Invalid Source")
         player._gateway_handler.send.assert_not_called()
 
