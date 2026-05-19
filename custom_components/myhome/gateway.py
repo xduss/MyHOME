@@ -144,7 +144,7 @@ class MyHOMEGatewayHandler:
         # Active Discovery
         await self.send_status_request(OWNCommand.parse("*#1*0##")) # Lighting
         await self.send_status_request(OWNCommand.parse("*#2*0##")) # Automation / Covers
-        await self.send_status_request(OWNCommand.parse("*#4*0##")) # Heating / Climate
+        await self.send_status_request(OWNCommand.parse("*#4*0#0*20##")) # Heating / Climate
         await self.send_status_request(OWNCommand.parse("*#16*0##")) # Audio
 
         while not self._terminate_listener:

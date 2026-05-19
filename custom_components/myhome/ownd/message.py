@@ -848,7 +848,7 @@ class OWNHeatingEvent(OWNEvent):
                     self._is_active = False
                     self._human_readable_log += "; heating fan is off."
 
-        elif self._dimension == 20:  # Actuator status
+        elif self._dimension == 20 and self._where != "#0":  # Actuator status
             self._type = MESSAGE_TYPE_ACTION
             self._is_active = self._dimension_value[0] in _actuator_active_states
             self._actuator = (

@@ -65,8 +65,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     
     _domain_to_who = {
         "light": "1",
-        "cover": "2",
         "switch": "1",
+        "cover": "2",
+        "climate": "4",
         "media_player": "16",
     }
     
@@ -116,7 +117,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     customize_file = hass.config.path("customize.yaml")
     if os.path.isfile(customize_file):
         try:
-            hass.data[DOMAIN]["customizations"] = load_yaml(customize_file) or {}
+            hass.data[DOMAIN]["customizations"] = await hass.loop.run_in_executor(
+                None, lambda: load_yaml(customize_file)
+            ) or {}
             LOGGER.info("Successfully loaded %s custom names from customize.yaml for recovery", len(hass.data[DOMAIN]["customizations"]))
         except Exception as e:
             LOGGER.error("Failed to parse customize.yaml for friendly_name recovery: %s", e)
