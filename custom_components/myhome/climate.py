@@ -28,6 +28,7 @@ from .ownd.message import (
     MESSAGE_TYPE_MAIN_TEMPERATURE,
     MESSAGE_TYPE_MAIN_HUMIDITY,
     MESSAGE_TYPE_TARGET_TEMPERATURE,
+    MESSAGE_TYPE_FAN,
     MESSAGE_TYPE_LOCAL_OFFSET,
     MESSAGE_TYPE_LOCAL_TARGET_TEMPERATURE,
     MESSAGE_TYPE_MODE,
@@ -249,6 +250,11 @@ class MyHOMEClimate(MyHOMEEntity, ClimateEntity):
         # Fan mode is not yet implemented in the OpenWebNet protocol handler.
         # Do not advertise FAN_MODE to avoid NotImplementedError in the UI.
         self._fan = fan
+        
+        if fan:
+            self._attr_supported_features |= ClimateEntityFeature.FAN_MODE
+            self._attr_fan_modes = ["auto", "low", "medium", "high"]
+            self._attr_fan_mode = None
 
         self._attr_current_temperature = None
         self._attr_current_humidity = None
@@ -280,12 +286,28 @@ class MyHOMEClimate(MyHOMEEntity, ClimateEntity):
         )
 
     @property
+    def fan_mode(self):
+        return getattr(self, "_attr_fan_mode", None)
+    
+    @property
+    def fan_modes(self):
+        return ["auto", "low", "medium", "high"]
+
+    @property
     def target_temperature(self) -> float:
         if self._local_target_temperature is not None:
             return self._local_target_temperature
         else:
             return self._target_temperature
 
+
+    # in OWN fan (dimension 11) is read-only
+    async def async_set_fan_mode(self, fan_mode):
+        """Set fan mode."""
+        LOGGER.debug(
+            "Fan mode change requested but not supported: %s",
+            fan_mode,
+        )
     async def async_set_hvac_mode(self, hvac_mode):
         """Set new target hvac mode."""
         if hvac_mode == HVACMode.OFF:
@@ -387,6 +409,22 @@ class MyHOMEClimate(MyHOMEEntity, ClimateEntity):
             self._local_target_temperature = (
                 self._target_temperature + self._local_offset
             )
+        # -------------------- FAN
+        elif message.message_type == MESSAGE_TYPE_FAN and self._fan:
+            LOGGER.info(
+                "%s %s",
+                self._gateway_handler.log_id,
+                message.human_readable_log,
+            )
+            fan_map = {
+                0: "auto",
+                1: "low",
+                2: "medium",
+                3: "high",
+            }
+        
+            self._attr_fan_mode = fan_map.get(message._fan_speed)
+        # ------------------------------------ FAN END
         elif message.message_type == MESSAGE_TYPE_LOCAL_OFFSET:
             LOGGER.info(
                 "%s %s",
