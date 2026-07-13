@@ -94,6 +94,8 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             _is_heating = _custom.get("heating", True)
             _is_cooling = _custom.get("cooling", True)
             _is_fan = _custom.get("fan", False)
+            _min_temp = _custom.get("min_temp", 5)
+            _max_temp = _custom.get("max_temp", 40)
             
             _model = _custom.get("model", "Climate Device")
             _name = _custom.get("friendly_name", f"Climate Zone {clean_where}")
@@ -107,6 +109,8 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 heating=_is_heating,
                 cooling=_is_cooling,
                 fan=_is_fan,
+                min_temp=_min_temp,
+                max_temp=_max_temp,
                 standalone=_is_standalone,
                 central=_is_central,
                 manufacturer="BTicino",
@@ -146,7 +150,9 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             _is_heating = _custom.get("heating", True)
             _is_cooling = _custom.get("cooling", True)
             _is_fan = _custom.get("fan", False)
-        
+            _min_temp = _custom.get("min_temp", 5)
+            _max_temp = _custom.get("max_temp", 40)
+
             _model = _custom.get("model", "Climate Device")
             _name = _custom.get("friendly_name", f"Climate Zone {clean_where}")
         
@@ -159,6 +165,8 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 heating=_is_heating,
                 cooling=_is_cooling,
                 fan=_is_fan,
+                min_temp=_min_temp,
+                max_temp=_max_temp,
                 standalone=_is_standalone,
                 central=_is_central,
                 manufacturer="BTicino",
@@ -209,6 +217,8 @@ class MyHOMEClimate(MyHOMEEntity, ClimateEntity):
         fan: bool,
         standalone: bool,
         central: bool,
+        min_temp: float,
+        max_temp: float,
         manufacturer: str,
         model: str,
         gateway: MyHOMEGatewayHandler,
@@ -231,10 +241,13 @@ class MyHOMEClimate(MyHOMEEntity, ClimateEntity):
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
         self._attr_precision = 0.1
         self._attr_target_temperature_step = 0.5
-        self._attr_min_temp = 5
-        self._attr_max_temp = 40
+        self._attr_min_temp = min_temp
+        self._attr_max_temp = max_temp
 
-        self._attr_supported_features = 0
+        self._attr_supported_features = ClimateEntityFeature(0)
+        self._attr_supported_features |= (
+            ClimateEntityFeature.TURN_ON | ClimateEntityFeature.TURN_OFF
+        )
         self._attr_hvac_modes = [HVACMode.OFF]
         self._heating = heating
         self._cooling = cooling
@@ -264,6 +277,7 @@ class MyHOMEClimate(MyHOMEEntity, ClimateEntity):
 
         self._attr_hvac_mode = None
         self._attr_hvac_action = None
+        self._last_hvac_mode = None
 
     async def async_added_to_hass(self):
         """Run when entity about to be added to hass."""
@@ -300,6 +314,55 @@ class MyHOMEClimate(MyHOMEEntity, ClimateEntity):
         else:
             return self._target_temperature
 
+    def _get_turn_on_hvac_mode(self):
+        """Return HVAC mode to use when turning the climate entity on."""
+        if (
+            self._last_hvac_mode is not None
+            and self._last_hvac_mode != HVACMode.OFF
+            and self._last_hvac_mode in self._attr_hvac_modes
+        ):
+            return self._last_hvac_mode
+    
+        if HVACMode.HEAT in self._attr_hvac_modes:
+            return HVACMode.HEAT
+    
+        if HVACMode.COOL in self._attr_hvac_modes:
+            return HVACMode.COOL
+    
+        if HVACMode.AUTO in self._attr_hvac_modes:
+            return HVACMode.AUTO
+    
+        return None
+
+    async def async_turn_on(self):
+        """Turn the climate entity on, restoring the last non-off HVAC mode."""
+        hvac_mode = self._get_turn_on_hvac_mode()
+    
+        if hvac_mode is None:
+            LOGGER.warning(
+                "%s Cannot turn on climate zone %s: no supported non-off HVAC mode",
+                self._gateway_handler.log_id,
+                self._where,
+            )
+            return
+    
+        await self.async_set_hvac_mode(hvac_mode)
+    
+    
+    async def async_turn_off(self):
+        """Turn the climate entity off."""
+        if self._attr_hvac_mode not in (None, HVACMode.OFF):
+            self._last_hvac_mode = self._attr_hvac_mode
+    
+        await self.async_set_hvac_mode(HVACMode.OFF)
+    
+    
+    async def async_toggle(self):
+        """Toggle the climate entity."""
+        if self._attr_hvac_mode == HVACMode.OFF:
+            await self.async_turn_on()
+        else:
+            await self.async_turn_off()
 
     # in OWN fan (dimension 11) is read-only
     async def async_set_fan_mode(self, fan_mode):
@@ -469,6 +532,7 @@ class MyHOMEClimate(MyHOMEEntity, ClimateEntity):
                     message.human_readable_log,
                 )
                 self._attr_hvac_mode = HVACMode.COOL
+                self._last_hvac_mode = HVACMode.COOL
                 if self._attr_hvac_action == HVACAction.OFF:
                     self._attr_hvac_action = HVACAction.IDLE
             elif (
@@ -481,6 +545,7 @@ class MyHOMEClimate(MyHOMEEntity, ClimateEntity):
                     message.human_readable_log,
                 )
                 self._attr_hvac_mode = HVACMode.HEAT
+                self._last_hvac_mode = HVACMode.HEAT
                 if self._attr_hvac_action == HVACAction.OFF:
                     self._attr_hvac_action = HVACAction.IDLE
             elif message.mode == CLIMATE_MODE_OFF:
@@ -502,6 +567,7 @@ class MyHOMEClimate(MyHOMEEntity, ClimateEntity):
             #        message.human_readable_log,
             #    )
             #    self._attr_hvac_mode = HVACMode.AUTO
+            #    self._last_hvac_mode = HVACMode.AUTO
             #    if self._attr_hvac_action == HVACAction.OFF:
             #        self._attr_hvac_action = HVACAction.IDLE
             if (
@@ -514,6 +580,7 @@ class MyHOMEClimate(MyHOMEEntity, ClimateEntity):
                     message.human_readable_log,
                 )
                 self._attr_hvac_mode = HVACMode.COOL
+                self._last_hvac_mode = HVACMode.COOL
                 if self._attr_hvac_action == HVACAction.OFF:
                     self._attr_hvac_action = HVACAction.IDLE
             elif (
@@ -526,6 +593,7 @@ class MyHOMEClimate(MyHOMEEntity, ClimateEntity):
                     message.human_readable_log,
                 )
                 self._attr_hvac_mode = HVACMode.HEAT
+                self._last_hvac_mode = HVACMode.HEAT
                 if self._attr_hvac_action == HVACAction.OFF:
                     self._attr_hvac_action = HVACAction.IDLE
             elif message.mode == CLIMATE_MODE_OFF:
